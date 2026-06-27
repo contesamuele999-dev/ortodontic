@@ -21,18 +21,18 @@
   html,body{margin:0;height:100%;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--txt);overflow:hidden}
   #app{display:flex;height:100vh;width:100vw}
   #scene{flex:1;position:relative;min-width:0}
-  canvas{display:block}
+  canvas{display:block;touch-action:none}
   #hud{position:absolute;top:0;left:0;right:0;padding:14px 18px;display:flex;align-items:center;gap:14px;pointer-events:none;flex-wrap:wrap}
   #hud .title{font-weight:700;font-size:16px;letter-spacing:.2px}
   #hud .sub{color:var(--muted);font-size:12px}
-  #hud .sig{color:var(--muted);font-size:10px;opacity:.6;margin-top:2px;font-style:italic}
+  #hud .sig{color:var(--muted);font-size:10px;opacity:.6;margin-top:6px;font-style:italic}
   .pill{pointer-events:auto;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:12px;color:var(--txt);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
   .pill:hover{border-color:var(--accent)}
   #modeToggle{margin-left:auto}
   #modeToggle .on{color:var(--accent);font-weight:600}
   #search{pointer-events:auto;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:12px;color:var(--txt);min-width:180px}
   #search::placeholder{color:var(--muted)}
-  #legend{position:absolute;bottom:12px;left:18px;display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--muted);pointer-events:none}
+  #legend{position:absolute;bottom:12px;left:18px;max-width:60vw;display:flex;gap:10px 14px;flex-wrap:wrap;font-size:11px;color:var(--muted);pointer-events:none}
   #legend span{display:inline-flex;align-items:center;gap:5px}
   #legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
   #hint{position:absolute;bottom:12px;right:18px;font-size:11px;color:var(--muted)}
@@ -109,7 +109,7 @@
       <div>
         <div class="title">Mappa Denti · Organi 3D</div>
         <div class="sub">Correlazioni dentosofiche — Dott. L. Bastianello</div>
-        <div class="sig">designed by Samuele C.</div>
+        <div class="sig" >designed by Samuele C.</div>
       </div>
       <input id="search" placeholder="Cerca organo, es. fegato…" autocomplete="off">
       <div id="modeToggle" class="pill"><span class="on" id="mPro">Pro</span><span style="color:var(--muted)">/</span><span id="mPaz" style="color:var(--muted)">Paziente</span></div>
@@ -121,9 +121,9 @@
       <span><i style="background:var(--legno)"></i>Legno</span>
       <span><i style="background:var(--acqua)"></i>Acqua</span>
     </div>
-    <div id="hint">Trascina per ruotare · scroll per zoom · clic su un dente</div>
+    <div id="hint">Trascina per ruotare · scroll o pizzica con due dita per zoom · clic su un dente</div>
 
-    <div id="organs">
+    <div id="organs" >
       <h3>Organi &amp; Sistemi</h3>
       <div class="list" id="organsList"></div>
     </div>
@@ -325,32 +325,94 @@ meshes.forEach(m=>{
 const ray = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 let selected=null, hovered=null;
-let rot={x:-0.35,y:0}, drag=false, last={x:0,y:0}, dist=13;
+// rot = rotazione corrente (renderizzata), rotTarget = dove vogliamo arrivare.
+// L'interpolazione fra le due dà movimento fluido (smoothing) ed elimina gli scatti su mobile.
+let rot={x:-0.35,y:0}, rotTarget={x:-0.35,y:0};
+let dist=13, distTarget=13;
+let drag=false, last={x:0,y:0};
+// gestione multi-touch: traccia i puntatori attivi per distinguere 1 dito (ruota) da 2 dita (pinch)
+const pointers=new Map();
+let pinchStartDist=0, pinchStartCam=13;
 
 function resize(){
   const w=sceneEl.clientWidth, h=sceneEl.clientHeight;
+  if(!w || !h) return; // layout non ancora pronto: evita canvas a dimensione 0
   renderer.setSize(w,h); camera.aspect=w/h; camera.updateProjectionMatrix();
+  renderer.render(scene,camera);
 }
-window.addEventListener('resize',resize); resize();
+window.addEventListener('resize',resize);
+window.addEventListener('orientationchange',resize);
+window.addEventListener('load',resize);
+// Osserva i cambi di dimensione del contenitore (apertura pannello, switch vista,
+// settle del layout). Risolve la vista che si caricava solo dopo aver aperto F12.
+if('ResizeObserver' in window){
+  new ResizeObserver(resize).observe(sceneEl);
+}
+resize();
+// fallback: ri-misura dopo il primo frame e dopo il settle del layout
+requestAnimationFrame(resize);
+setTimeout(resize,200);
 
 const cv = renderer.domElement;
-cv.addEventListener('pointerdown',e=>{drag=true;last={x:e.clientX,y:e.clientY};});
-window.addEventListener('pointerup',()=>{drag=false;});
+const clampX = v => Math.max(-1.2, Math.min(0.5, v));
+const clampDist = v => Math.max(6, Math.min(24, v));
+let downPos=null;
+
+function pinchDistance(){
+  const pts=[...pointers.values()];
+  return Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
+}
+
+cv.addEventListener('pointerdown',e=>{
+  cv.setPointerCapture?.(e.pointerId);
+  pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  downPos={x:e.clientX,y:e.clientY};
+  if(pointers.size===1){
+    drag=true; last={x:e.clientX,y:e.clientY};
+  }else if(pointers.size===2){
+    // inizio pinch: memorizza distanza fra le dita e zoom corrente
+    drag=false;
+    pinchStartDist=pinchDistance();
+    pinchStartCam=distTarget;
+  }
+});
+
+function endPointer(e){
+  pointers.delete(e.pointerId);
+  if(pointers.size===1){
+    // tornati a un dito: riprendi la rotazione da quel dito
+    const p=[...pointers.values()][0];
+    drag=true; last={x:p.x,y:p.y};
+  }else if(pointers.size===0){
+    drag=false;
+  }
+}
+window.addEventListener('pointerup',endPointer);
+window.addEventListener('pointercancel',endPointer);
+
 window.addEventListener('pointermove',e=>{
   const r=cv.getBoundingClientRect();
   mouse.x=((e.clientX-r.left)/r.width)*2-1;
   mouse.y=-((e.clientY-r.top)/r.height)*2+1;
-  if(drag){
-    rot.y += (e.clientX-last.x)*0.006;
-    rot.x += (e.clientY-last.y)*0.006;
-    rot.x = Math.max(-1.2, Math.min(0.5, rot.x));
+  if(pointers.has(e.pointerId)) pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+
+  if(pointers.size>=2){
+    // PINCH: due dita -> zoom. Avvicinare = zoom in, allontanare = zoom out (dezoom).
+    if(pinchStartDist>0){
+      const d=pinchDistance();
+      distTarget=clampDist(pinchStartCam * (pinchStartDist/Math.max(d,1)));
+    }
+    return;
+  }
+  if(drag && pointers.size===1){
+    // aggiorna il TARGET di rotazione; lo smoothing avviene nel loop di animazione
+    rotTarget.y += (e.clientX-last.x)*0.006;
+    rotTarget.x = clampX(rotTarget.x + (e.clientY-last.y)*0.006);
     last={x:e.clientX,y:e.clientY};
   }
 });
-cv.addEventListener('wheel',e=>{e.preventDefault();dist=Math.max(8,Math.min(22,dist+e.deltaY*0.01));},{passive:false});
-// click sul dente: usa le coordinate reali del click + soglia anti-drag
-let downPos=null;
-cv.addEventListener('pointerdown',e=>{ downPos={x:e.clientX,y:e.clientY}; });
+
+cv.addEventListener('wheel',e=>{e.preventDefault();distTarget=clampDist(distTarget+e.deltaY*0.01);},{passive:false});
 cv.addEventListener('click',e=>{
   // ignora se è stato un trascinamento (rotazione) e non un click netto
   if(downPos && Math.hypot(e.clientX-downPos.x, e.clientY-downPos.y)>6) return;
@@ -588,6 +650,10 @@ function animate(){
   const hits=ray.intersectObjects(meshes);
   const newHover = hits.length?hits[0].object.userData.fdi:null;
   if(newHover!==hovered){hovered=newHover;applyHighlight();cv.style.cursor=hovered?'pointer':'grab';}
+  // smoothing: interpola rotazione e zoom verso il target -> movimento fluido senza scatti
+  rot.x += (rotTarget.x-rot.x)*0.18;
+  rot.y += (rotTarget.y-rot.y)*0.18;
+  dist  += (distTarget-dist)*0.18;
   // camera orbit
   root.rotation.y = rot.y; root.rotation.x = rot.x;
   camera.position.set(0, dist*0.45, dist);
