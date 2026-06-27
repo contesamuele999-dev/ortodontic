@@ -66,7 +66,7 @@
   .orgItem.active{background:#1d3a4d;color:#bfe6ff}
   .orgItem i{width:10px;height:10px;border-radius:3px;flex:0 0 auto}
   .orgItem .cnt{margin-left:auto;font-size:10px;color:var(--muted)}
-  #organsToggle{position:absolute;top:64px;left:18px;z-index:5}
+  #organsToggle{position:absolute;top:64px;left:18px;z-index:31;display:none}
   /* Banner installazione */
   #install{position:absolute;left:50%;transform:translateX(-50%);bottom:46px;background:var(--accent);color:#06121b;font-size:13px;font-weight:600;padding:9px 16px;border-radius:999px;cursor:pointer;display:none;align-items:center;gap:8px;box-shadow:0 6px 20px rgba(0,0,0,.4)}
   /* Bottoni azione nel pannello */
@@ -75,9 +75,17 @@
   .pBtn:hover{border-color:var(--accent)}
   @media(max-width:720px){
     #app{flex-direction:column}
-    #panel{width:100%;max-width:100%;height:48vh;border-left:none;border-top:1px solid var(--line)}
-    #panel.hidden{margin-right:0;margin-bottom:-48vh}
-    #organs{width:200px;max-height:42vh}
+    #scene{min-height:0}
+    /* il pannello dettagli diventa un "bottom sheet" sovrapposto: appare sempre sopra la scena */
+    #panel{position:fixed;left:0;right:0;bottom:0;top:auto;width:100%;max-width:100%;height:62vh;
+           border-left:none;border-top:1px solid var(--line);border-radius:16px 16px 0 0;
+           z-index:40;box-shadow:0 -10px 30px rgba(0,0,0,.5);transition:transform .25s,margin-bottom .25s}
+    #panel.hidden{margin-right:0;margin-bottom:0;transform:translateY(100%)}
+    #closeP{top:12px;right:16px;font-size:26px}
+    /* indice organi: pannello a comparsa, parte chiuso su mobile */
+    #organs{top:58px;left:12px;width:220px;max-height:60vh;z-index:30}
+    #organs.collapsed{transform:translateX(-260px)}
+    #organsToggle{display:flex!important;top:58px;left:12px}
   }
   /* ---- VISTA STAMPA SCHEDA PAZIENTE ---- */
   #printCard{display:none}
@@ -112,7 +120,7 @@
         <div id="sig">designed by Samuele C.</div>
       </div>
       <input id="search" placeholder="Cerca organo, es. fegato…" autocomplete="off">
-      <div id="modeToggle" class="pill"><span class="on" id="mPro">Pro</span><span style="color:var(--muted)">/</span><span id="mPaz" style="color:var(--muted)">Paziente</span></div>
+      <div id="modeToggle" class="pill"><span class="on" id="mPro">Pro</span><span style="color:var(--muted)">/</span><span id="mPaz" style="color:var(--muted)">Base</span></div>
     </div>
     <div id="legend">
       <span><i style="background:var(--fuoco)"></i>Fuoco</span>
@@ -123,7 +131,8 @@
     </div>
     <div id="hint">Trascina per ruotare · scroll o pizzica con due dita per zoom · clic su un dente</div>
 
-    <div id="organs" >
+    <div id="organsToggle" class="pill">☰ Organi</div>
+    <div id="organs">
       <h3>Organi &amp; Sistemi</h3>
       <div class="list" id="organsList"></div>
     </div>
@@ -563,7 +572,20 @@ organsList.addEventListener('click',e=>{
   }
   renderOrganList();
   applyHighlight();
+  // su mobile chiudi l'indice dopo la scelta, così si vede il pannello dettagli
+  if(isMobile() && activeOrgan) organsEl.classList.add('collapsed');
 });
+
+/* ---------- TOGGLE INDICE ORGANI (mobile) ---------- */
+const organsEl=document.getElementById('organs');
+const organsToggle=document.getElementById('organsToggle');
+function isMobile(){ return window.matchMedia('(max-width:720px)').matches; }
+function setOrgansCollapsed(c){ organsEl.classList.toggle('collapsed', c); }
+organsToggle.onclick=()=> setOrgansCollapsed(!organsEl.classList.contains('collapsed'));
+// parte chiuso su mobile per non coprire la scena
+function initOrgansState(){ setOrgansCollapsed(isMobile()); }
+initOrgansState();
+window.addEventListener('resize',initOrgansState);
 
 /* ========================================================
    DEEP-LINK via hash (#16) — apre direttamente un dente
