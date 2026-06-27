@@ -304,16 +304,6 @@ function buildArch(list, isUpper){
 buildArch(UPPER, true);
 buildArch(LOWER, false);
 
-// gengiva (toroidi schematici)
-function gum(y){
-  const g = new THREE.TorusGeometry(5.4, 0.32, 12, 60, Math.PI*1.35);
-  const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({color:0xb05a6a, roughness:0.8}));
-  m.rotation.x = Math.PI/2; m.rotation.z = Math.PI*0.175;
-  m.position.set(0, y, 1.2); m.scale.set(1.14,1,0.84);
-  root.add(m);
-}
-gum(1.4); gum(-1.4);
-
 /* ---------- LABELS (sprite numeri FDI) ---------- */
 function makeLabel(text){
   const c = document.createElement('canvas'); c.width=128; c.height=64;
