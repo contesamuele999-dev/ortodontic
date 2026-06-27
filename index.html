@@ -269,8 +269,7 @@ function toothGeometry(gruppo){
   }
 }
 
-// Ordine denti per arcata (quad 1/4 -> quad 2/3). Resa specchiata: vista clinica
-// frontale, la destra del paziente compare a sinistra dello schermo.
+// Ordine denti per arcata (quad 1/4 -> quad 2/3).
 const UPPER = ['18','17','16','15','14','13','12','11','21','22','23','24','25','26','27','28'];
 const LOWER = ['48','47','46','45','44','43','42','41','31','32','33','34','35','36','37','38'];
 
@@ -285,16 +284,15 @@ function buildArch(list, isUpper){
     // semiellisse frontale: angolo da -100° a +100°
     const t = i/(n-1);                // 0..1
     const ang = (-1 + 2*t) * (Math.PI*0.62); // arco frontale
-    // SPECCHIO ORIZZONTALE: nego x -> destra del paziente a sinistra dello schermo
-    const x = -Math.sin(ang) * radiusX;
+    const x = Math.sin(ang) * radiusX;
     const z = -Math.cos(ang) * radiusZ + 1.2;
     const geo = toothGeometry(d.gruppo);
     const col = ELEM_COLOR[d.elemento] || 0x999999;
     const mat = new THREE.MeshStandardMaterial({color:col, roughness:0.5, metalness:0.15, emissive:0x000000});
     const m = new THREE.Mesh(geo, mat);
     m.position.set(x, yArch, z);
-    // orienta verso il centro (segno invertito per via dello specchio su x)
-    m.rotation.y = ang;
+    // orienta verso il centro
+    m.rotation.y = -ang;
     // i canini (coni) puntano verso il piano occlusale (centro): in alto puntano giù, in basso su
     if(d.gruppo==='Canino') m.rotation.x = yArch>0 ? Math.PI : 0;
     m.userData = {fdi, baseColor:col};
@@ -309,7 +307,7 @@ buildArch(LOWER, false);
 function gum(y){
   const g = new THREE.TorusGeometry(5.4, 0.32, 12, 60, Math.PI*1.35);
   const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({color:0xb05a6a, roughness:0.8}));
-  m.rotation.x = Math.PI/2; m.rotation.z = Math.PI*0.175;
+  m.rotation.x = Math.PI/2; m.rotation.z = -Math.PI*0.175;
   m.position.set(0, y, 1.2); m.scale.set(1.14,1,0.84);
   root.add(m);
 }
